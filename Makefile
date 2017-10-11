@@ -1,5 +1,5 @@
 # driver makefile
-obj-m+=kobj.o
+obj-m+=ldm.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) modules

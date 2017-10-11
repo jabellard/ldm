@@ -3,7 +3,8 @@
 #include <linux/sysfs.h>
 #include <linux/kobject.h>
 #include <linux/string.h>
-#include "kobj.h"
+#include <linux/slab.h>
+#include "ldm.h"
 
 static struct kobj_type *my_ktype;
 static struct kobject *root;
@@ -12,8 +13,8 @@ static struct kobject *right;
 
 static struct sysfs_ops ops =
 {
-	.show = &kobj_show,
-	.store = &kobj_store
+	.show = &ldm_show,
+	.store = &ldm_store
 }; // end ops
 
 static int f1 = 10;
@@ -27,7 +28,7 @@ static attr_map map[] =
 	{NULL, {.name = 0, .mode = 0}}
 }; // end map[]
 
-ssize_t kobj_show(struct kobject *kobj, struct attribute *attr, char *buffer)
+ssize_t ldm_show(struct kobject *kobj, struct attribute *attr, char *buffer)
 {
 	int *object;
 	int i = 0;
@@ -42,10 +43,10 @@ ssize_t kobj_show(struct kobject *kobj, struct attribute *attr, char *buffer)
 	
 	// error
 	return -1;
-} // end kobj_show()
+} // end ldm_show()
 
 
-ssize_t kobj_store(struct kobject *kobj, struct attribute *attr, const char *buffer, size_t size)
+ssize_t ldm_store(struct kobject *kobj, struct attribute *attr, const char *buffer, size_t size)
 {
 	int object;
 	kstrtoint(buffer, 10, &object);
@@ -63,40 +64,40 @@ ssize_t kobj_store(struct kobject *kobj, struct attribute *attr, const char *buf
 	
 	// error 
 	return -1;
-} // end kobj_store()
+} // end ldm_store()
 
 
-void kobj_release( struct kobject *kobj)
+void ldm_release( struct kobject *kobj)
 {
-	;
-} // end kobj_release()
-static int __init kobj_init(void)
+	printk(KERN_INFO "Release function...\n");
+} // end ldm_release()
+static int __init ldm_init(void)
 {
 	// set up the kobject type
-	struct kobj_type tk1;
-	my_ktype = &tk1;
+	my_ktype = kmalloc(sizeof(struct kobj_type), GFP_KERNEL);
 	memset(my_ktype, 0, sizeof(*my_ktype));
-	my_ktype->release = &kobj_release;
+	my_ktype->release = &ldm_release;
 	my_ktype->sysfs_ops = &ops;
 	my_ktype->default_attrs = NULL;
 	
 	// set up the root kobject
-	struct kobject t;
-	root = &t;
+	root = kmalloc(sizeof(struct kobject), GFP_KERNEL);
 	memset(root, 0, sizeof(*root));
 	root->kset = NULL;
+	printk(KERN_INFO "Ref count before initialization: %d\n", root->kref.refcount);
+	
 	kobject_init_and_add(root, my_ktype, kernel_kobj, "t");
 	
+	printk(KERN_INFO "Ref count after init and registration: %d\n", root->kref.refcount);
+	
 	// set up the left sub-kobject
-	struct kobject l;
-	left = &l;
+	left = kmalloc(sizeof(struct kobject), GFP_KERNEL);
 	memset(left, 0, sizeof(*left));
 	left->kset = NULL;
 	kobject_init_and_add(left, my_ktype, root, "l");
 	
 	// set up the right sub-kobject
-	struct kobject r;
-	right = &r;
+	right = kmalloc(sizeof(struct kobject), GFP_KERNEL);
 	memset(right, 0, sizeof(*right));
 	right->kset = NULL;
 	kobject_init_and_add(right, my_ktype, root, "r");
@@ -108,11 +109,11 @@ static int __init kobj_init(void)
 	{
 		sysfs_create_file(left, &map[i].attr);
 	} // end for
-	printk(KERN_INFO "Done init.\n");
+	printk(KERN_INFO "Done initializing.\n");
 	return 0;
-} // end kobj_init()
+} // end ldm_init()
 
-static void __exit kobj_exit(void)
+static void __exit ldm_exit(void)
 {
 
 	// remove attributes from the left sub-kobject
@@ -123,19 +124,16 @@ static void __exit kobj_exit(void)
 	} // end for
 	
 	// delete the kobjects themselves
-	//kobject_put(right);
-	kobject_del(right);
-	//kobject_put(left);
-	kobject_del(left);
-	//kobject_put(root);
-	kobject_del(root);
-	printk(KERN_INFO "Done exit.\n");
-} // end kobj_exit()
+	kobject_put(right);
+	kobject_put(left);
+	kobject_put(root);
+	printk(KERN_INFO "Done exiting.\n");
+} // end ldm_exit()
 
-module_init(kobj_init);
-module_exit(kobj_exit);
+module_init(ldm_init);
+module_exit(ldm_exit);
 
-MODULE_DESCRIPTION("kobj");
+MODULE_DESCRIPTION("ldm");
 MODULE_AUTHOR("Joe Nathan Abellard");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0");
