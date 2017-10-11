@@ -6,6 +6,7 @@
 #include <linux/slab.h>
 #include "ldm.h"
 
+static struct kset *my_kset;
 static struct kobj_type *my_ktype;
 static struct kobject *root;
 static struct kobject *left;
@@ -23,8 +24,8 @@ static int f2 = 20;
 
 static attr_map map[] =
 {
-	{&f1,{.name = "f1", .mode = 0664}},
-	{&f2,{.name = "f2", .mode = 0664}},
+	{&f1,{.name = "f1", .mode = 0666}},
+	{&f2,{.name = "f2", .mode = 0666}},
 	{NULL, {.name = 0, .mode = 0}}
 }; // end map[]
 
@@ -80,27 +81,30 @@ static int __init ldm_init(void)
 	my_ktype->sysfs_ops = &ops;
 	my_ktype->default_attrs = NULL;
 	
+	// set up the kset
+	my_kset = kset_create_and_add("T", NULL, kernel_kobj);
+	
 	// set up the root kobject
 	root = kmalloc(sizeof(struct kobject), GFP_KERNEL);
 	memset(root, 0, sizeof(*root));
-	root->kset = NULL;
-	printk(KERN_INFO "Ref count before initialization: %d\n", root->kref.refcount);
+	root->kset = my_kset;
+	kobject_init_and_add(root, my_ktype, NULL, "t");
+	kobject_uevent(root, KOBJ_ADD);
 	
-	kobject_init_and_add(root, my_ktype, kernel_kobj, "t");
-	
-	printk(KERN_INFO "Ref count after init and registration: %d\n", root->kref.refcount);
 	
 	// set up the left sub-kobject
 	left = kmalloc(sizeof(struct kobject), GFP_KERNEL);
 	memset(left, 0, sizeof(*left));
-	left->kset = NULL;
+	left->kset = my_kset;
 	kobject_init_and_add(left, my_ktype, root, "l");
+	kobject_uevent(left, KOBJ_ADD);
 	
 	// set up the right sub-kobject
 	right = kmalloc(sizeof(struct kobject), GFP_KERNEL);
 	memset(right, 0, sizeof(*right));
-	right->kset = NULL;
+	right->kset = my_kset;
 	kobject_init_and_add(right, my_ktype, root, "r");
+	kobject_uevent(right, KOBJ_ADD);
 	
 	
 	// add attributes to the left kobject
@@ -127,6 +131,7 @@ static void __exit ldm_exit(void)
 	kobject_put(right);
 	kobject_put(left);
 	kobject_put(root);
+	kset_unregister(my_kset);
 	printk(KERN_INFO "Done exiting.\n");
 } // end ldm_exit()
 
@@ -136,4 +141,4 @@ module_exit(ldm_exit);
 MODULE_DESCRIPTION("ldm");
 MODULE_AUTHOR("Joe Nathan Abellard");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0");
+MODULE_VERSION("1.1");
